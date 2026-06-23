@@ -8,15 +8,21 @@ This repository contains a sample GitOps-style Kubernetes deployment using **kin
 
 1. [Prerequisites](#prerequisites)
 2. [Project Structure](#project-structure)
-3. [Creating the Cluster](#creating-the-cluster)
-4. [Installing Argo CD](#installing-argo-cd)
-   - [Accessing the Argo CD UI](#accessing-the-argo-cd-ui)
-   - [Retrieving the Admin Password](#retrieving-the-admin-password)
-5. [Deploying the Sample Application](#deploying-the-sample-application)
+3. [Manual Setup Steps (Run Once)](#manual-setup-steps-run-once)
+   - [Step 1 — Create the Cluster](#step-1--create-the-cluster)
+   - [Step 2 — Install Argo CD](#step-2--install-argo-cd)
+   - [Step 3 — Create the ArgoCD `platform` Project](#step-3--create-the-argocd-platform-project)
+   - [Step 4 — Bootstrap the Root Application](#step-4--bootstrap-the-root-application)
+   - [Step 5 — Verify Everything Synced](#step-5--verify-everything-synced)
+4. [What ArgoCD Automates After Bootstrap](#what-argocd-automates-after-bootstrap)
+5. [Manual Fallback (Without ArgoCD)](#manual-fallback-without-argocd)
    - [Dev Environment](#dev-environment)
    - [Stage Environment](#stage-environment)
    - [Prod Environment](#prod-environment)
-6. [Cleaning Up](#cleaning-up)
+6. [Accessing the Argo CD UI](#accessing-the-argo-cd-ui)
+7. [Cleaning Up](#cleaning-up)
+8. [Issue Resolution Log](#issue-resolution-log)
+9. [Additional Resources](#additional-resources)
 
 ---
 
@@ -69,7 +75,11 @@ kind version
 
 ---
 
-## Creating the Cluster
+## Manual Setup Steps (Run Once)
+
+These are the **only commands you run manually**. After Step 4, ArgoCD takes over and manages everything automatically via GitOps.
+
+### Step 1 — Create the Cluster
 
 Create a local Kubernetes cluster using **kind**:
 
@@ -84,73 +94,42 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
----
-
-## Installing Argo CD
-
-### 1. Add the Argo Helm repository
+### Step 2 — Install Argo CD
 
 ```bash
+# 2a. Add the Argo Helm repository
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update argo
-```
 
-### 2. Create the `argocd` namespace
-
-```bash
+# 2b. Create the argocd namespace
 kubectl create namespace argocd
-```
 
-### 3. Install Argo CD
-
-```bash
+# 2c. Install ArgoCD via Helm
 helm install argocd argo/argo-cd --namespace argocd --wait --timeout 10m
+
+# 2d. Verify ArgoCD pods are running
+kubectl get pods -n argocd
 ```
 
-### 4. Create the ArgoCD Project
+Expected output: all ArgoCD pods should be in `Running` status.
 
-The `crossplane-dev` application uses ArgoCD project `platform`. Create it before bootstrapping:
+### Step 3 — Create the ArgoCD `platform` Project
+
+The `root-app` and `crossplane-dev` applications both use ArgoCD project `platform`. You must create this project before applying the root application.
 
 ```bash
 kubectl apply -f bootstrap/dev/project-platform.yaml
 ```
 
-### 5. Verify the installation
+### Step 4 — Bootstrap the Root Application
 
-```bash
-kubectl get pods -n argocd
-```
-
-Expected output: all 7 pods should be in `Running` status.
-
----
-
-## Bootstrapping the GitOps Applications
-
-Before applying `root-app.yaml`, the following must exist in the cluster:
-
-| Prerequisite | Status | Command to verify |
-|--------------|--------|-------------------|
-| `kind` cluster running | ✅ Required | `kubectl get nodes` |
-| `argocd` namespace | ✅ Required | `kubectl get namespace argocd` |
-| ArgoCD pods running | ✅ Required | `kubectl get pods -n argocd` |
-| `platform` AppProject | ✅ Required | `kubectl get appproject platform -n argocd` |
-
-**Apply the bootstrap manifest:**
+Apply the single bootstrap manifest. This is the **last manual setup step**.
 
 ```bash
 kubectl apply -f bootstrap/dev/root-app.yaml
 ```
 
-**What this does:**
-1. Creates the `root-app` ArgoCD Application in the `platform` project
-2. `root-app` scans `argocd/apps-dev/` for child Application manifests
-3. Discovers `crossplane.yaml` and creates the `crossplane-dev` Application
-4. `crossplane-dev` points to `applications/crossplane/overlays/dev/`
-5. Kustomize renders the final manifests (base + dev overlay)
-6. Crossplane is deployed into `crossplane-system` namespace
-
-**Verify sync status:**
+### Step 5 — Verify Everything Synced
 
 ```bash
 kubectl get applications -n argocd
@@ -160,34 +139,25 @@ You should see both `root-app` and `crossplane-dev` in `Synced` / `Healthy` stat
 
 ---
 
-## Accessing the Argo CD UI
+## What ArgoCD Automates After Bootstrap
 
-### Port-forward the Argo CD server
+Once `root-app.yaml` is applied, ArgoCD handles everything automatically. No further manual commands are needed for normal operations.
 
-```bash
-kubectl port-forward service/argocd-server -n argocd 8080:443
-```
-
-Then open your browser at: `https://localhost:8080`
-
-> **Note**: Accept the self-signed certificate warning in your browser.
-
-### Retrieving the Admin Password
-
-The default username is `admin`. Retrieve the auto-generated password with:
-
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-```
-
-> **Security tip**: Delete the initial secret after first login and configure a new password or SSO.
+| Step | Who does it | What happens |
+|------|-------------|--------------|
+| ① | ArgoCD | `root-app` scans `argocd/apps-dev/` |
+| ② | ArgoCD | `root-app` discovers `crossplane.yaml` and creates the `crossplane-dev` Application |
+| ③ | ArgoCD | `crossplane-dev` points to `applications/crossplane/overlays/dev/` |
+| ④ | Kustomize | Renders final manifests (base + dev overlay) |
+| ⑤ | ArgoCD | Applies manifests to `crossplane-system` namespace |
+| ⑥ | GitOps | On every Git push to `dev` branch, ArgoCD auto-syncs changes |
+| ⑦ | Drift detection | If someone manually changes the cluster, ArgoCD self-heals back to Git state |
 
 ---
 
-## Deploying the Sample Application
+## Manual Fallback (Without ArgoCD)
 
-The sample application (`myapp`) is deployed using **Kustomize** overlays for each environment.
+If you need to deploy directly without ArgoCD, use `kubectl apply -k`.
 
 ### Dev Environment
 
@@ -195,19 +165,11 @@ The sample application (`myapp`) is deployed using **Kustomize** overlays for ea
 kubectl apply -k applications/crossplane/overlays/dev/
 ```
 
-- **Namespace**: `dev`
-- **Replicas**: `1`
-- **Image tag**: `dev-latest`
-
 ### Stage Environment
 
 ```bash
 kubectl apply -k applications/crossplane/overlays/stage/
 ```
-
-- **Namespace**: `stage`
-- **Replicas**: `1`
-- **Image tag**: `stage-latest`
 
 ### Prod Environment
 
@@ -215,22 +177,7 @@ kubectl apply -k applications/crossplane/overlays/stage/
 kubectl apply -k applications/crossplane/overlays/prod/
 ```
 
-- **Namespace**: `prod`
-- **Replicas**: `3`
-- **Image tag**: `prod-latest`
-- **Extras**: HorizontalPodAutoscaler (HPA) included
-
-### Verify Deployments
-
-```bash
-kubectl get pods -n dev
-kubectl get pods -n stage
-kubectl get pods -n prod
-```
-
 ### Preview Kustomize Output (Dry Run)
-
-Before applying, you can preview the rendered manifests:
 
 ```bash
 kubectl kustomize applications/crossplane/overlays/dev/
