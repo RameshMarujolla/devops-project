@@ -50,28 +50,42 @@ kind version
 
 ```
 .
-├── README.md
+├── README.md                               # Project documentation & setup guide
+├── project.md                              # Complete architecture reference
+│
+├── bootstrap/
+│   └── dev/
+│       ├── project-platform.yaml           # ArgoCD AppProject: platform
+│       └── root-app.yaml                   # ArgoCD root application (App of Apps)
+│
+├── argocd/
+│   └── apps-dev/
+│       └── crossplane.yaml                 # ArgoCD Application: crossplane-dev
+│
 └── applications/
     └── crossplane/
-        ├── base/
-        │   ├── deployment.yaml      # Base Deployment manifest
-        │   ├── service.yaml         # Base Service manifest
-        │   └── kustomization.yaml   # Base Kustomize config
-        └── overlays/
+        ├── base/                           # Shared base configuration
+        │   ├── kustomization.yaml          # Base Kustomize config
+        │   ├── namespace.yaml              # crossplane-system namespace
+        │   └── values.yaml                 # Base Helm values for Crossplane
+        │
+        └── overlays/                       # Environment-specific patches
             ├── dev/
-            │   ├── deployment-patch.yaml
-            │   └── kustomization.yaml   # Dev environment overrides
+            │   ├── kustomization.yaml      # Dev Kustomize config
+            │   └── values-dev.yaml         # Dev-specific Helm values
             ├── stage/
-            │   ├── deployment-patch.yaml
-            │   └── kustomization.yaml   # Stage environment overrides
+            │   ├── deployment-patch.yaml   # Stage Deployment resource patch
+            │   └── kustomization.yaml      # Stage Kustomize config
             └── prod/
-                ├── deployment-patch.yaml
-                ├── hpa.yaml             # HorizontalPodAutoscaler for prod
-                └── kustomization.yaml   # Prod environment overrides
+                ├── deployment-patch.yaml   # Prod Deployment resource patch
+                ├── hpa.yaml                # HorizontalPodAutoscaler for prod
+                └── kustomization.yaml      # Prod Kustomize config
 ```
 
-- **Base**: Shared Kubernetes manifests used across all environments.
-- **Overlays**: Environment-specific patches and configurations (replica count, image tag, namespace, HPA, etc.).
+- **Base**: Shared Kubernetes manifests (namespace, Helm chart, default values) used across all environments.
+- **Overlays**: Environment-specific patches and configurations (resource limits, replica count, image tag, HPA, etc.).
+- **argocd/**: ArgoCD Application manifests that define what gets deployed.
+- **bootstrap/**: One-time setup manifests (AppProject + root App-of-Apps) that must be applied manually.
 
 ---
 
