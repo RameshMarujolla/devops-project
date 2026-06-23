@@ -8,7 +8,7 @@ spec:
 
   source:
     repoURL: https://github.com/RameshMarujolla/devops-project.git
-    targetRevision: dev     # or main
+    targetRevision: main
     path: argocd/apps-dev
 
   destination:
