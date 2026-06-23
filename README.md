@@ -220,6 +220,51 @@ kind delete cluster --name devops-cluster
 
 ---
 
+## Issue Resolution Log
+
+### Git Push Failed: Diverged Branches with Unrelated Histories
+
+**Error:**
+```
+fatal: refusing to merge unrelated histories
+```
+
+**Context:**
+Local `main` and `origin/main` had diverged with **no common ancestor** (unrelated histories). The branches each had one commit not present in the other.
+
+**Resolution Steps:**
+
+1. Fetch remote changes:
+   ```bash
+   git fetch origin
+   ```
+
+2. Merge with `--allow-unrelated-histories`:
+   ```bash
+   git merge origin/main --allow-unrelated-histories
+   ```
+
+3. Resolve merge conflicts. In this case, `README.md` had a conflict (local had content while remote had only a stub). The conflict was resolved by keeping the local `README.md` content.
+
+4. Stage the resolved file:
+   ```bash
+   git add README.md
+   ```
+
+5. Complete the merge commit:
+   ```bash
+   git commit -m "Merge origin/main"
+   ```
+
+6. Push to remote:
+   ```bash
+   git push origin main
+   ```
+
+**Root Cause:** The local repository was initialized independently of the remote GitHub repository, resulting in two unrelated commit histories that could not be merged without the `--allow-unrelated-histories` flag.
+
+---
+
 ## Additional Resources
 
 - [Argo CD Documentation](https://argo-cd.readthedocs.io/)
