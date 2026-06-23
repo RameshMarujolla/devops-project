@@ -308,6 +308,171 @@ The `crossplane-dev` ArgoCD Application specifies `spec.project: platform`, but 
 
 ---
 
+### ArgoCD Error: "revision dev must be resolved"
+
+**Error (in ArgoCD UI):**
+```
+Unable to load data: revision dev must be resolved
+```
+
+**Context:**
+Both `root-app.yaml` and `crossplane.yaml` specified `targetRevision: dev`, but the `dev` branch did not exist on the remote GitHub repository. Only `main` existed.
+
+**Resolution Steps:**
+
+1. Create a local `dev` branch from `main`:
+   ```bash
+   git checkout -b dev
+   ```
+
+2. Push the `dev` branch to remote:
+   ```bash
+   git push origin dev
+   ```
+
+**Root Cause:** ArgoCD polls the Git repository for the branch specified in `targetRevision`. If the branch does not exist, it cannot resolve the revision and the sync fails.
+
+---
+
+### ArgoCD Error: Kustomize Build Failed, "must specify --enable-helm"
+
+**Error (ArgoCD application conditions):**
+```
+trouble configuring builtin HelmChartInflationGenerator with config: ...
+: must specify --enable-helm
+```
+
+**Context:**
+The dev overlay uses Kustomize's `helmCharts` plugin to render the Crossplane Helm chart. ArgoCD's Kustomize support does **not** enable Helm by default for security reasons. Without `--enable-helm`, Kustomize refuses to process `helmCharts` blocks.
+
+**Resolution Steps:**
+
+1. Patch the ArgoCD ConfigMap to enable Helm for Kustomize:
+   ```bash
+   kubectl patch configmap argocd-cm -n argocd --type merge \
+     -p '{"data":{"kustomize.buildOptions":"--enable-helm"}}'
+   ```
+
+2. Restart the ArgoCD repo-server so it picks up the new config:
+   ```bash
+   kubectl rollout restart deployment argocd-repo-server -n argocd
+   ```
+
+**Root Cause:** ArgoCD repo-server runs Kustomize with a restricted set of flags. The `helmCharts` Kustomize plugin requires the `--enable-helm` flag, which must be explicitly enabled via the `argocd-cm` ConfigMap.
+
+---
+
+### Kustomize Error: valuesFile Outside Overlay Directory
+
+**Error (ArgoCD repo-server logs):**
+```
+security; file '<path>/applications/crossplane/base/values.yaml' is not in or below
+'<path>/applications/crossplane/overlays/dev'
+```
+
+**Context:**
+The dev overlay's `kustomization.yaml` contained a duplicate `helmCharts` block with `valuesFile: ../../base/values.yaml`. Kustomize's `--enable-helm` enforces a security restriction: all referenced files must be within or below the kustomization directory (`overlays/dev/` in this case). The path `../../base/values.yaml` escapes the overlay directory.
+
+Additionally, the base `kustomization.yaml` **already** contained a `helmCharts` block. Having `helmCharts` in both the base and the overlay causes Crossplane to be rendered **twice**, producing duplicate resources.
+
+**Resolution:**
+
+Removed the duplicate `helmCharts` block from `applications/crossplane/overlays/dev/kustomization.yaml`. The base renders the Helm chart once with `base/values.yaml`; all overlays simply reference the base and apply patches.
+
+**Before (broken):**
+```yaml
+resources:
+  - ../../base
+
+helmCharts:
+  - name: crossplane
+    valuesFile: ../../base/values.yaml      # escapes overlay dir
+    additionalValuesFiles:
+      - values-dev.yaml
+```
+
+**After (fixed):**
+```yaml
+resources:
+  - ../../base
+```
+
+**Root Cause:** Kustomize's `--enable-helm` restricts file access to the kustomization directory tree for security. Paths like `../../base/values.yaml` violate this boundary. The correct pattern is to render the Helm chart only in the base, and use Kustomize patches (not Helm values) for overlay-specific changes.
+
+---
+
+### ArgoCD Error: Cluster-Scoped Resources Not Permitted
+
+**Error (ArgoCD application sync result):**
+```
+resource rbac.authorization.k8s.io:ClusterRole is not permitted in project platform
+resource rbac.authorization.k8s.io:ClusterRoleBinding is not permitted in project platform
+```
+
+**Context:**
+The Crossplane Helm chart creates cluster-scoped resources: `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, and `Namespace`. By default, ArgoCD AppProjects only allow namespaced resources (via `destinations`). Cluster-scoped resources require explicit whitelist configuration.
+
+**Resolution:**
+
+Added `clusterResourceWhitelist` to `bootstrap/dev/project-platform.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform infrastructure components (Crossplane, etc.)
+  destinations:
+    - namespace: '*'
+      server: https://kubernetes.default.svc
+  sourceRepos:
+    - '*'
+  clusterResourceWhitelist:       # ← added
+    - group: '*'
+      kind: '*'
+```
+
+**Root Cause:** `destinations` with `namespace: '*'` only permits **namespaced** resources in any namespace. Cluster-scoped resources (`ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `Namespace`) require `clusterResourceWhitelist` in the AppProject definition.
+
+---
+
+### Crossplane CrashLoopBackOff: leaderElection Map Value
+
+**Error (Crossplane container logs):**
+```
+crossplane: error: --leader-election: bool value must be true, 1, yes, false, 0 or no
+but got "map[enabled:true]"
+(from envar LEADER_ELECTION="map[enabled:true]")
+```
+
+**Context:**
+The `values.yaml` file used the nested-map syntax for `leaderElection`:
+```yaml
+leaderElection:
+  enabled: true
+```
+
+Crossplane v1.20.1 expects `leaderElection` to be a flat boolean, not a nested map. The Helm chart template incorrectly rendered the Go map `map[enabled:true]` into the `LEADER_ELECTION` environment variable, causing the Crossplane binary to crash immediately on startup.
+
+**Resolution:**
+
+Changed `applications/crossplane/base/values.yaml` from:
+```yaml
+leaderElection:
+  enabled: true
+```
+
+To:
+```yaml
+leaderElection: true
+```
+
+**Root Cause:** Crossplane Helm chart v1.20.1 expects `leaderElection` as a top-level boolean key. The nested `enabled` property is valid in some newer or older chart versions, but v1.20.1's template logic treats the entire map as a string and passes it to the container as a malformed environment variable.
+
+---
+
 ## Additional Resources
 
 - [Argo CD Documentation](https://argo-cd.readthedocs.io/)
