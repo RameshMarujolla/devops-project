@@ -98,8 +98,9 @@ The project follows the **App of Apps** pattern with Argo CD, where a single "ro
 │       └── root-app.yaml                   # ArgoCD root application (App of Apps)
 │
 ├── argocd/
-│   └── apps-dev/
-│       └── crossplane.yaml                 # ArgoCD Application: crossplane-dev
+│   ├── apps-dev/
+│   │   └── crossplane.yaml                 # ArgoCD Application: crossplane-dev
+│   └── project-platform.yaml               # ArgoCD AppProject: platform
 │
 └── applications/
     └── crossplane/
@@ -168,6 +169,29 @@ kubectl apply -f bootstrap/dev/root-app.yaml
 | `spec.destination.namespace` | `crossplane-system` | Target namespace for Crossplane |
 | `spec.syncPolicy.automated.prune` | `true` | Delete resources removed from Git |
 | `spec.syncPolicy.automated.selfHeal` | `true` | Revert manual changes to match Git |
+
+---
+
+#### `argocd/project-platform.yaml`
+
+**Purpose:** Creates the ArgoCD `platform` AppProject that scopes the `crossplane-dev` application. By default ArgoCD only has the `default` project. This manifest must be applied **before** bootstrapping the root-app, or ArgoCD will refuse to sync the `crossplane-dev` application.
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| `metadata.name` | `platform` | Project name referenced by `crossplane-dev` |
+| `metadata.namespace` | `argocd` | ArgoCD's own namespace |
+| `spec.description` | `Platform infrastructure components...` | Human-readable description |
+| `spec.destinations` | `namespace: '*', server: 'https://kubernetes.default.svc'` | Allows deploying to any namespace on the in-cluster API |
+| `spec.sourceRepos` | `'*'` | Allows any Git repository as a source |
+
+**Why it's needed:** The `crossplane-dev` Application specifies `spec.project: platform`. ArgoCD's RBAC model requires that project to exist before any Application can use it. Without this manifest, the ArgoCD UI shows:
+
+> *"Unable to load data: app is not allowed in project 'platform', or the project does not exist"*
+
+**Deploy command:**
+```bash
+kubectl apply -f argocd/project-platform.yaml
+```
 
 ---
 
@@ -434,6 +458,32 @@ helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update argo
 kubectl create namespace argocd
 helm install argocd argo/argo-cd --namespace argocd --wait --timeout 10m
+```
+
+### Step 2B: Create the ArgoCD `platform` Project
+
+The `crossplane-dev` application is scoped to ArgoCD project `platform` (see `spec.project` in `argocd/apps-dev/crossplane.yaml`). You must create this project before bootstrapping, or ArgoCD will refuse to sync with the error:
+
+> *"app is not allowed in project 'platform', or the project does not exist"*
+
+```bash
+kubectl apply -f argocd/project-platform.yaml
+```
+
+**`argocd/project-platform.yaml`:**
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform infrastructure components (Crossplane, etc.)
+  destinations:
+    - namespace: '*'
+      server: https://kubernetes.default.svc
+  sourceRepos:
+    - '*'
 ```
 
 ### Step 3: Bootstrap Root Application

@@ -107,7 +107,15 @@ kubectl create namespace argocd
 helm install argocd argo/argo-cd --namespace argocd --wait --timeout 10m
 ```
 
-Verify the installation:
+### 4. Create the ArgoCD Project
+
+The `crossplane-dev` application uses ArgoCD project `platform`. Create it before bootstrapping:
+
+```bash
+kubectl apply -f argocd/project-platform.yaml
+```
+
+### 5. Verify the installation
 
 ```bash
 kubectl get pods -n argocd
