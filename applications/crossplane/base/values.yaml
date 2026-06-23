@@ -1,0 +1,25 @@
+# applications/crossplane/base/values.yaml
+provider:
+  packages: []
+
+resourcesCrossplane:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+resourcesRBACManager:
+  limits:
+    cpu: 100m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+metrics:
+  enabled: true
+
+leaderElection:
+  enabled: true

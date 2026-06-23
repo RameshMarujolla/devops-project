@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: stage
+
+namePrefix: stage-
+
+resources:
+  - ../../base
+
+replicas:
+  - name: app
+    count: 2
+
+images:
+  - name: myapp
+    newTag: stage-latest
+
+patches:
+  - path: deployment-patch.yaml
