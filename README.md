@@ -273,6 +273,45 @@ Local `main` and `origin/main` had diverged with **no common ancestor** (unrelat
 
 ---
 
+### ArgoCD Error: App Not Allowed in Project "platform"
+
+**Error (in ArgoCD UI):**
+```
+Unable to load data: app is not allowed in project "platform", or the project does not exist
+```
+
+**Context:**
+The `crossplane-dev` ArgoCD Application specifies `spec.project: platform`, but ArgoCD only ships with the built-in `default` project. The `platform` project must be explicitly created before ArgoCD will allow the application to sync.
+
+**Resolution Steps:**
+
+1. Create the ArgoCD `platform` AppProject:
+   ```bash
+   kubectl apply -f argocd/project-platform.yaml
+   ```
+
+2. The `argocd/project-platform.yaml` file:
+   ```yaml
+   apiVersion: argoproj.io/v1alpha1
+   kind: AppProject
+   metadata:
+     name: platform
+     namespace: argocd
+   spec:
+     description: Platform infrastructure components (Crossplane, etc.)
+     destinations:
+       - namespace: '*'
+         server: https://kubernetes.default.svc
+     sourceRepos:
+       - '*'
+   ```
+
+3. Refresh the application in ArgoCD UI (or wait for auto-sync).
+
+**Root Cause:** ArgoCD requires AppProjects to exist before any Application can reference them. The `platform` project was referenced in `argocd/apps-dev/crossplane.yaml` but had not been created in the cluster yet.
+
+---
+
 ## Additional Resources
 
 - [Argo CD Documentation](https://argo-cd.readthedocs.io/)
