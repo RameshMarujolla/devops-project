@@ -125,6 +125,41 @@ Expected output: all 7 pods should be in `Running` status.
 
 ---
 
+## Bootstrapping the GitOps Applications
+
+Before applying `root-app.yaml`, the following must exist in the cluster:
+
+| Prerequisite | Status | Command to verify |
+|--------------|--------|-------------------|
+| `kind` cluster running | ✅ Required | `kubectl get nodes` |
+| `argocd` namespace | ✅ Required | `kubectl get namespace argocd` |
+| ArgoCD pods running | ✅ Required | `kubectl get pods -n argocd` |
+| `platform` AppProject | ✅ Required | `kubectl get appproject platform -n argocd` |
+
+**Apply the bootstrap manifest:**
+
+```bash
+kubectl apply -f bootstrap/dev/root-app.yaml
+```
+
+**What this does:**
+1. Creates the `root-app` ArgoCD Application in the `platform` project
+2. `root-app` scans `argocd/apps-dev/` for child Application manifests
+3. Discovers `crossplane.yaml` and creates the `crossplane-dev` Application
+4. `crossplane-dev` points to `applications/crossplane/overlays/dev/`
+5. Kustomize renders the final manifests (base + dev overlay)
+6. Crossplane is deployed into `crossplane-system` namespace
+
+**Verify sync status:**
+
+```bash
+kubectl get applications -n argocd
+```
+
+You should see both `root-app` and `crossplane-dev` in `Synced` / `Healthy` state.
+
+---
+
 ## Accessing the Argo CD UI
 
 ### Port-forward the Argo CD server
