@@ -112,7 +112,7 @@ helm install argocd argo/argo-cd --namespace argocd --wait --timeout 10m
 The `crossplane-dev` application uses ArgoCD project `platform`. Create it before bootstrapping:
 
 ```bash
-kubectl apply -f argocd/project-platform.yaml
+kubectl apply -f bootstrap/dev/project-platform.yaml
 ```
 
 ### 5. Verify the installation
@@ -322,10 +322,10 @@ The `crossplane-dev` ArgoCD Application specifies `spec.project: platform`, but 
 
 1. Create the ArgoCD `platform` AppProject:
    ```bash
-   kubectl apply -f argocd/project-platform.yaml
+   kubectl apply -f bootstrap/dev/project-platform.yaml
    ```
 
-2. The `argocd/project-platform.yaml` file:
+2. The `bootstrap/dev/project-platform.yaml` file:
    ```yaml
    apiVersion: argoproj.io/v1alpha1
    kind: AppProject

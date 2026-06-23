@@ -95,12 +95,12 @@ The project follows the **App of Apps** pattern with Argo CD, where a single "ro
 │
 ├── bootstrap/
 │   └── dev/
+│       ├── project-platform.yaml           # ArgoCD AppProject: platform
 │       └── root-app.yaml                   # ArgoCD root application (App of Apps)
 │
 ├── argocd/
-│   ├── apps-dev/
-│   │   └── crossplane.yaml                 # ArgoCD Application: crossplane-dev
-│   └── project-platform.yaml               # ArgoCD AppProject: platform
+│   └── apps-dev/
+│       └── crossplane.yaml                 # ArgoCD Application: crossplane-dev
 │
 └── applications/
     └── crossplane/
@@ -172,7 +172,7 @@ kubectl apply -f bootstrap/dev/root-app.yaml
 
 ---
 
-#### `argocd/project-platform.yaml`
+#### `bootstrap/dev/project-platform.yaml`
 
 **Purpose:** Creates the ArgoCD `platform` AppProject that scopes the `crossplane-dev` application. By default ArgoCD only has the `default` project. This manifest must be applied **before** bootstrapping the root-app, or ArgoCD will refuse to sync the `crossplane-dev` application.
 
@@ -190,7 +190,7 @@ kubectl apply -f bootstrap/dev/root-app.yaml
 
 **Deploy command:**
 ```bash
-kubectl apply -f argocd/project-platform.yaml
+kubectl apply -f bootstrap/dev/project-platform.yaml
 ```
 
 ---
@@ -467,10 +467,10 @@ The `crossplane-dev` application is scoped to ArgoCD project `platform` (see `sp
 > *"app is not allowed in project 'platform', or the project does not exist"*
 
 ```bash
-kubectl apply -f argocd/project-platform.yaml
+kubectl apply -f bootstrap/dev/project-platform.yaml
 ```
 
-**`argocd/project-platform.yaml`:**
+**`bootstrap/dev/project-platform.yaml`:**
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
